@@ -1,26 +1,205 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   QuizForge — Global Stylesheet
+   Design system: "Modern Dark (Cinema)" + "Friendly SaaS"
+   Source of truth: /design-system/MASTER.md
+   Tailwind v4 (CSS-first). No tailwind.config.js — tokens live in @theme.
+   ========================================================================== */
+
+/* ----------------------------------------------------------------------------
+   1) RAW CSS VARIABLES (:root)
+   Plain values for direct use in inline styles, gradients, shadows, and any
+   place that needs the literal value rather than a generated utility class.
+   OLED-safe: backgrounds are never pure #000.
+   -------------------------------------------------------------------------- */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Surfaces / backgrounds */
+  --bg-deep: #060608;
+  --bg-base: #0b0b0f;
+  --bg-elevated: #121218;
+  --surface: rgba(255, 255, 255, 0.05);
+
+  /* Text */
+  --foreground: #ececef;
+  --foreground-muted: #8a8f98;
+
+  /* Brand */
+  --accent: #6366f1; /* indigo — primary actions, focus ring */
+  --accent-glow: rgba(99, 102, 241, 0.22);
+  --secondary: #a855f7; /* violet — gradient pair */
+
+  /* Status */
+  --success: #34d399;
+  --warning: #fbbf24; /* gold — scores */
+  --destructive: #f87171;
+
+  /* Lines / shape */
+  --border: rgba(255, 255, 255, 0.08);
+  --radius: 16px;
+
+  /* Motion — cinematic easing curve used across the app */
+  --ease-cinema: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Gradient helper (indigo -> violet) */
+  --gradient-brand: linear-gradient(135deg, var(--accent) 0%, var(--secondary) 100%);
 }
 
+/* ----------------------------------------------------------------------------
+   2) THEME TOKENS (@theme inline)
+   Maps the raw :root variables to Tailwind utilities. `inline` is required so
+   each --color-* can reference the var() above (single source of truth).
+   Enables utilities like: bg-bg-deep, bg-bg-elevated, text-foreground,
+   text-foreground-muted, bg-accent, text-accent, ring-accent, bg-secondary,
+   text-success, text-warning, text-destructive, border-border.
+   -------------------------------------------------------------------------- */
 @theme inline {
-  --color-background: var(--background);
+  /* Backgrounds */
+  --color-bg-deep: var(--bg-deep);
+  --color-bg-base: var(--bg-base);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-surface: var(--surface);
+
+  /* Text */
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-foreground-muted: var(--foreground-muted);
+
+  /* Brand */
+  --color-accent: var(--accent);
+  --color-secondary: var(--secondary);
+
+  /* Status */
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-destructive: var(--destructive);
+
+  /* Lines / shape */
+  --color-border: var(--border);
+  --radius: var(--radius);
+
+  /* Fonts — Plus Jakarta Sans is loaded via next/font/google in layout.tsx
+     and exposed as --font-jakarta. Enables the `font-sans` utility. */
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  /* Easing — usable as ease-cinema in transition-timing utilities */
+  --ease-cinema: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ----------------------------------------------------------------------------
+   3) BASE STYLES
+   -------------------------------------------------------------------------- */
+* {
+  border-color: var(--border);
+}
+
+html {
+  scroll-behavior: smooth;
+  color-scheme: dark;
+  /* Force a dark UA palette for form controls, scrollbars, etc. */
+  background-color: var(--bg-deep);
 }
 
 body {
-  background: var(--background);
+  background-color: var(--bg-deep);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-jakarta), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Text selection — subtle brand tint, readable contrast */
+::selection {
+  background-color: var(--accent-glow);
+  color: var(--foreground);
+}
+
+/* Consistent focus ring across interactive elements */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ----------------------------------------------------------------------------
+   4) UTILITIES
+   -------------------------------------------------------------------------- */
+
+/* Frosted-glass surface: blurred translucent panel with a hairline border.
+   Use on cards, modals, sticky headers, popovers. */
+.glass {
+  background-color: var(--surface);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* Tabular figures — locks digit width so timers/scores don't jitter. */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Brand gradient text (e.g. hero headlines, score highlights). */
+.text-gradient-brand {
+  background-image: var(--gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Soft brand glow shadow for primary CTAs and active states. */
+.glow-accent {
+  box-shadow: 0 0 0 1px var(--border), 0 8px 32px -8px var(--accent-glow);
+}
+
+/* ----------------------------------------------------------------------------
+   5) AMBIENT GLOW BLOBS
+   Slow, low-opacity background orbs behind hero sections. Disabled under
+   prefers-reduced-motion (section 6).
+   -------------------------------------------------------------------------- */
+.ambient-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  opacity: 0.5;
+  pointer-events: none;
+  will-change: transform;
+  animation: ambient-drift 18s var(--ease-cinema) infinite alternate;
+}
+
+@keyframes ambient-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(4%, -4%, 0) scale(1.12);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   6) REDUCED MOTION
+   Respect the user's OS setting — kill transitions, animations, smooth scroll.
+   Framer Motion components must ALSO gate via useReducedMotion() in JS.
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .ambient-blob {
+    animation: none !important;
+  }
 }
