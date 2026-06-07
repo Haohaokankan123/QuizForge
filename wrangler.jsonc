@@ -1,0 +1,27 @@
+{
+  // Cloudflare Workers config for QuizForge, deployed via the OpenNext adapter
+  // (@opennextjs/cloudflare). This is the current, non-deprecated way to run a
+  // Next.js 16 app on Cloudflare (next-on-pages is deprecated).
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "main": ".open-next/worker.js",
+  "name": "quizforge",
+  // nodejs_compat is REQUIRED so our Node-runtime API routes (Groq fetch,
+  // Supabase SSR) work; compat date must be >= 2024-09-23 for OpenNext.
+  "compatibility_date": "2024-12-30",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "global_fetch_strictly_public"
+  ],
+  // Static assets (the built /_next/static files etc.) served by the platform.
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  // Lets the worker call itself (used by OpenNext for some routing paths).
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "quizforge"
+    }
+  ]
+}
