@@ -56,6 +56,13 @@ export interface InputPickerProps {
   onChange: (text: string) => void;
   /** Report which source produced the current text. */
   onSourceTypeChange: (s: SourceType) => void;
+  /**
+   * Called whenever a file/transcript extraction starts (true) or finishes
+   * (false). The parent uses this to BLOCK "Generate" while text is still being
+   * read, so a quiz can never be made from stale (previous) content before the
+   * new file finishes extracting.
+   */
+  onExtractingChange?: (extracting: boolean) => void;
   /** Soft cap on characters for the paste counter. @default 100000 */
   maxChars?: number;
   /** Disable all inputs (e.g. while the parent is generating). */
@@ -104,6 +111,7 @@ export default function InputPicker({
   value,
   onChange,
   onSourceTypeChange,
+  onExtractingChange,
   maxChars = DEFAULT_MAX_CHARS,
   disabled = false,
 }: InputPickerProps) {
@@ -185,6 +193,13 @@ export default function InputPicker({
     setFileError(null);
     setFileResult(null);
     setFileLoading(true);
+    // Clear any PREVIOUS content the moment a new file is chosen. Without this,
+    // the old text (e.g. a prior PDF) lingers in the parent's state while this
+    // new file is still being read — and if the user hits Generate during that
+    // window, the quiz would be built from the OLD file. Clearing here makes that
+    // impossible: there is simply no stale content to submit.
+    onChange("");
+    onExtractingChange?.(true);
     try {
       // Dynamic import keeps the heavy pdf/docx libs out of the initial bundle.
       const { extractText } = await import("@/lib/extract");
@@ -200,6 +215,7 @@ export default function InputPicker({
       setFileError(message);
     } finally {
       setFileLoading(false);
+      onExtractingChange?.(false);
     }
   }
 
@@ -253,6 +269,10 @@ export default function InputPicker({
     setYtError(null);
     setYtResult(null);
     setYtLoading(true);
+    // Same anti-stale rule as file upload: drop any previous content while we
+    // fetch the transcript, and block Generate until it lands.
+    onChange("");
+    onExtractingChange?.(true);
     try {
       const res = await fetch("/api/youtube", {
         method: "POST",
@@ -280,6 +300,7 @@ export default function InputPicker({
       );
     } finally {
       setYtLoading(false);
+      onExtractingChange?.(false);
     }
   }
 

@@ -115,6 +115,10 @@ export default function GeneratePage() {
   // --- Request state ---
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // True while InputPicker is reading an uploaded file or fetching a YouTube
+  // transcript. We block "Generate" during this window so a quiz can never be
+  // built from stale (previous) content before the new source finishes loading.
+  const [extracting, setExtracting] = useState(false);
   // Holds the in-flight request's AbortController so the user can cancel a slow
   // generation (and so we can time it out) without losing their pasted content.
   const abortRef = useRef<AbortController | null>(null);
@@ -124,10 +128,12 @@ export default function GeneratePage() {
   const hasContent = trimmedLength > 0;
   const hasTypes = selectedTypes.length > 0;
   const overLimit = content.length > MAX_CONTENT_CHARS;
-  const canSubmit = hasContent && hasTypes && !overLimit && !loading;
+  const canSubmit =
+    hasContent && hasTypes && !overLimit && !loading && !extracting;
 
   // A single helper line explaining why the button is disabled (if it is).
   const helperText = useMemo(() => {
+    if (extracting) return "Reading your file… hang on a moment.";
     if (overLimit) {
       return `That's too long — keep it under ${MAX_CONTENT_CHARS.toLocaleString()} characters.`;
     }
@@ -137,7 +143,7 @@ export default function GeneratePage() {
     if (!hasContent) return "Paste some study content to generate a quiz.";
     if (!hasTypes) return "Select at least one question type.";
     return null;
-  }, [hasContent, hasTypes, overLimit]);
+  }, [extracting, hasContent, hasTypes, overLimit]);
 
   // --- Handlers ---
 
@@ -276,6 +282,7 @@ export default function GeneratePage() {
             <InputPicker
               value={content}
               onChange={setContent}
+              onExtractingChange={setExtracting}
               onSourceTypeChange={setSourceType}
               maxChars={MAX_CONTENT_CHARS}
               disabled={loading}

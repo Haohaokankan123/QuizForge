@@ -1,0 +1,217 @@
+{
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/app/api/generate/route.ts": {
+    "mtime": 1780815119.4378932,
+    "ast_hash": "0c7e2a5841687e857f8c6979205eb957",
+    "semantic_hash": "0c7e2a5841687e857f8c6979205eb957"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/app/api/youtube/route.ts": {
+    "mtime": 1780801160.5697505,
+    "ast_hash": "fde82f8da59741354ad82ec5519c831d",
+    "semantic_hash": "fde82f8da59741354ad82ec5519c831d"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/app/auth/callback/route.ts": {
+    "mtime": 1780805283.6883428,
+    "ast_hash": "3bb25807f3e10cbf388643dc1223279a",
+    "semantic_hash": "3bb25807f3e10cbf388643dc1223279a"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/app/auth/signout/route.ts": {
+    "mtime": 1780805290.174471,
+    "ast_hash": "4b4608f512da05728a5b588293e40187",
+    "semantic_hash": "4b4608f512da05728a5b588293e40187"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/app/dashboard/page.tsx": {
+    "mtime": 1780864343.9624271,
+    "ast_hash": "ca38b2cbacda5067a4d6bfbcb0bcf8bd",
+    "semantic_hash": "ca38b2cbacda5067a4d6bfbcb0bcf8bd"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/app/flashcards/page.tsx": {
+    "mtime": 1780805366.3725784,
+    "ast_hash": "8bd47ce3969c82b0440c8c2964985f68",
+    "semantic_hash": "8bd47ce3969c82b0440c8c2964985f68"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/app/generate/page.tsx": {
+    "mtime": 1780864441.4049997,
+    "ast_hash": "58edb7bda374740a200d4a686178cbfa",
+    "semantic_hash": "58edb7bda374740a200d4a686178cbfa"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/app/layout.tsx": {
+    "mtime": 1780864654.0139577,
+    "ast_hash": "01d2e2748c1d3c876960ce58e5d72c65",
+    "semantic_hash": "01d2e2748c1d3c876960ce58e5d72c65"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/app/login/page.tsx": {
+    "mtime": 1780864600.16699,
+    "ast_hash": "d251637966de1ba6e1a317fd1e3d8123",
+    "semantic_hash": "d251637966de1ba6e1a317fd1e3d8123"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/app/page.tsx": {
+    "mtime": 1780800187.7874753,
+    "ast_hash": "5c04612b401f6e07585b95d54032d5d3",
+    "semantic_hash": "5c04612b401f6e07585b95d54032d5d3"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/app/quiz/active/page.tsx": {
+    "mtime": 1780864663.1776931,
+    "ast_hash": "67a92056b096439b61df0df6d916424f",
+    "semantic_hash": "67a92056b096439b61df0df6d916424f"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/app/quiz/active/results/page.tsx": {
+    "mtime": 1780864730.076072,
+    "ast_hash": "8ef6f10d44851756469485e47b6e47b8",
+    "semantic_hash": "8ef6f10d44851756469485e47b6e47b8"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/app/quiz/timed/page.tsx": {
+    "mtime": 1780864678.3491669,
+    "ast_hash": "509880d7e3681f21b75d6c93202c9085",
+    "semantic_hash": "509880d7e3681f21b75d6c93202c9085"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/app/share/page.tsx": {
+    "mtime": 1780803977.1741734,
+    "ast_hash": "b52c680cf2df305c43060add0b41dd61",
+    "semantic_hash": "b52c680cf2df305c43060add0b41dd61"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/components/AmbientBackground.tsx": {
+    "mtime": 1780798738.5109055,
+    "ast_hash": "1c131a20eeb998f319a5d33505a283f0",
+    "semantic_hash": "1c131a20eeb998f319a5d33505a283f0"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/components/AppNav.tsx": {
+    "mtime": 1780805325.6590729,
+    "ast_hash": "40aa409a9021ad1976a6704ee10ae944",
+    "semantic_hash": "40aa409a9021ad1976a6704ee10ae944"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/components/AuthGuard.tsx": {
+    "mtime": 1780864290.6765654,
+    "ast_hash": "befbcb0e3a6982368e0ced0aae40724b",
+    "semantic_hash": "befbcb0e3a6982368e0ced0aae40724b"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/components/FlashcardDeck.tsx": {
+    "mtime": 1780804511.8874927,
+    "ast_hash": "003c892b162a50dd51a74545643b7aba",
+    "semantic_hash": "003c892b162a50dd51a74545643b7aba"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/components/InputPicker.tsx": {
+    "mtime": 1780864584.3822715,
+    "ast_hash": "b3036f9b3656c84b4f90d5205b193b93",
+    "semantic_hash": "b3036f9b3656c84b4f90d5205b193b93"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/components/QuizPlayer.tsx": {
+    "mtime": 1780799401.0550344,
+    "ast_hash": "81662f9ae4dc8a747a4d16fa6c6d81f2",
+    "semantic_hash": "81662f9ae4dc8a747a4d16fa6c6d81f2"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/components/TimedQuiz.tsx": {
+    "mtime": 1780803918.7206876,
+    "ast_hash": "c46394d728e31ab069a1393a2eb8cb02",
+    "semantic_hash": "c46394d728e31ab069a1393a2eb8cb02"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/components/ui/Badge.tsx": {
+    "mtime": 1780864459.7327745,
+    "ast_hash": "7522a3a594c3bad5463628c15a7e396b",
+    "semantic_hash": "7522a3a594c3bad5463628c15a7e396b"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/components/ui/Button.tsx": {
+    "mtime": 1780864477.4694061,
+    "ast_hash": "72b547319bff866c5da0cfcb9ebb26ce",
+    "semantic_hash": "72b547319bff866c5da0cfcb9ebb26ce"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/components/ui/Card.tsx": {
+    "mtime": 1780799016.8107822,
+    "ast_hash": "6e038b89d1216e38bb441a669324e287",
+    "semantic_hash": "6e038b89d1216e38bb441a669324e287"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/components/ui/Input.tsx": {
+    "mtime": 1780799136.3818765,
+    "ast_hash": "79ad2df3d8db19fbfcea2b6d5fe47dc4",
+    "semantic_hash": "79ad2df3d8db19fbfcea2b6d5fe47dc4"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/components/ui/ProgressBar.tsx": {
+    "mtime": 1780799085.8379955,
+    "ast_hash": "3bab120671aaec167a9a98a213484b9c",
+    "semantic_hash": "3bab120671aaec167a9a98a213484b9c"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/components/ui/SegmentedControl.tsx": {
+    "mtime": 1780799109.1170099,
+    "ast_hash": "31b1ac3290718aa584c271e1be8990f2",
+    "semantic_hash": "31b1ac3290718aa584c271e1be8990f2"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/components/ui/Skeleton.tsx": {
+    "mtime": 1780799059.7934895,
+    "ast_hash": "3d68a0d2fbd223bfea70351ce22eaf3c",
+    "semantic_hash": "3d68a0d2fbd223bfea70351ce22eaf3c"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/components/ui/Textarea.tsx": {
+    "mtime": 1780799044.5830877,
+    "ast_hash": "810931556fb8c2d3e0e060c4d2fb3ad2",
+    "semantic_hash": "810931556fb8c2d3e0e060c4d2fb3ad2"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/components/ui/index.ts": {
+    "mtime": 1780799116.7006009,
+    "ast_hash": "943c877d62caf54d37a8b999acd7ff58",
+    "semantic_hash": "943c877d62caf54d37a8b999acd7ff58"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/lib/auth.ts": {
+    "mtime": 1780805270.0835717,
+    "ast_hash": "864d2cd71096e8e71261985a005de88c",
+    "semantic_hash": "864d2cd71096e8e71261985a005de88c"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/lib/cn.ts": {
+    "mtime": 1780798985.9588137,
+    "ast_hash": "9f6fdc86eade928a8651c7121c6c97e9",
+    "semantic_hash": "9f6fdc86eade928a8651c7121c6c97e9"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/lib/extract.ts": {
+    "mtime": 1780799065.9000993,
+    "ast_hash": "ce8c3eed98695f305548178935af3c90",
+    "semantic_hash": "ce8c3eed98695f305548178935af3c90"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/lib/history.ts": {
+    "mtime": 1780803762.1792665,
+    "ast_hash": "9a8525bc6742e85343b0552ba727a0a9",
+    "semantic_hash": "9a8525bc6742e85343b0552ba727a0a9"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/lib/llm.ts": {
+    "mtime": 1780864204.0433924,
+    "ast_hash": "3be9ed5ed858edc855cee59d81172ef2",
+    "semantic_hash": "3be9ed5ed858edc855cee59d81172ef2"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/lib/pdf.ts": {
+    "mtime": 1780803920.6447968,
+    "ast_hash": "6242d0e92bf04243ee270b538ef0e8bc",
+    "semantic_hash": "6242d0e92bf04243ee270b538ef0e8bc"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/lib/quizzes.ts": {
+    "mtime": 1780805763.0995803,
+    "ast_hash": "bf92e5f71689288e66185e43c4174c83",
+    "semantic_hash": "bf92e5f71689288e66185e43c4174c83"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/lib/share.ts": {
+    "mtime": 1780803945.9974513,
+    "ast_hash": "abbf9f7588107d27c0c4b4042d44148f",
+    "semantic_hash": "abbf9f7588107d27c0c4b4042d44148f"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/lib/store.ts": {
+    "mtime": 1780805801.6494913,
+    "ast_hash": "ca0a9d286be474a4955c184ea5acd19b",
+    "semantic_hash": "ca0a9d286be474a4955c184ea5acd19b"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/lib/supabase/admin.ts": {
+    "mtime": 1780805170.9921713,
+    "ast_hash": "44fce4e2766e1a1a827005a82204745d",
+    "semantic_hash": "44fce4e2766e1a1a827005a82204745d"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/lib/supabase/client.ts": {
+    "mtime": 1780805151.6539342,
+    "ast_hash": "a0553c55938bd9a1224145eaac35316d",
+    "semantic_hash": "a0553c55938bd9a1224145eaac35316d"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/lib/supabase/server.ts": {
+    "mtime": 1780805161.151952,
+    "ast_hash": "2a1299f8a4d442cc5d8ef167542a7757",
+    "semantic_hash": "2a1299f8a4d442cc5d8ef167542a7757"
+  },
+  "/Users/charleschen/Downloads/Projects/Quiz_App_Project/quizforge/src/lib/types.ts": {
+    "mtime": 1780820472.5248542,
+    "ast_hash": "5f62c9cffc32b9e96abd79be42ba1282",
+    "semantic_hash": "5f62c9cffc32b9e96abd79be42ba1282"
+  }
+}
