@@ -21,7 +21,7 @@ import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FileQuestion } from "lucide-react";
-import type { Quiz, UserAnswer } from "@/lib/types";
+import type { PlayConfig, Quiz, UserAnswer } from "@/lib/types";
 import { Card } from "@/components/ui";
 import AppNav from "@/components/AppNav";
 import TimedQuiz from "@/components/TimedQuiz";
@@ -32,6 +32,10 @@ import { getCurrentUserId, saveAttempt } from "@/lib/store";
 const ACTIVE_QUIZ_KEY = "qf_active_quiz";
 /** sessionStorage key holding the finished result for the results page. */
 const ACTIVE_RESULT_KEY = "qf_active_result";
+/** sessionStorage key holding the PlayConfig (mode/timed/timer) for this attempt. */
+const PLAY_CONFIG_KEY = "qf_play_config";
+/** Fallback per-question budget (seconds) when no timer config is present. */
+const DEFAULT_SECONDS_PER_QUESTION = 30;
 
 /**
  * Shape stashed in sessionStorage for the results page to read.
@@ -85,6 +89,30 @@ function readActiveQuiz(): Quiz | null {
   }
 }
 
+// Stable-snapshot cache for the PlayConfig, same pattern as the quiz reader so
+// useSyncExternalStore gets an identity-stable value across re-renders.
+let cachedConfigRaw: string | null = null;
+let cachedConfig: PlayConfig | null = null;
+
+/** Read the PlayConfig from sessionStorage. Returns null when absent/invalid —
+ *  callers fall back to the default per-question budget. */
+function readPlayConfig(): PlayConfig | null {
+  try {
+    const raw = sessionStorage.getItem(PLAY_CONFIG_KEY);
+    if (raw === cachedConfigRaw) return cachedConfig;
+    cachedConfigRaw = raw;
+    if (!raw) {
+      cachedConfig = null;
+      return null;
+    }
+    cachedConfig = JSON.parse(raw) as PlayConfig;
+    return cachedConfig;
+  } catch {
+    cachedConfig = null;
+    return null;
+  }
+}
+
 export default function TimedQuizPage() {
   const router = useRouter();
 
@@ -100,6 +128,24 @@ export default function TimedQuizPage() {
     readActiveQuiz,
     () => null,
   );
+  // PlayConfig carries the timer the generate page picked. Absent on SSR and
+  // when the user didn't go through the configured flow.
+  const playConfig = useSyncExternalStore<PlayConfig | null>(
+    noopSubscribe,
+    readPlayConfig,
+    () => null,
+  );
+
+  // Translate the timer config into TimedQuiz props. 'total' => one whole-quiz
+  // budget; 'per_question' => budget × N (TimedQuiz's default behavior). With no
+  // valid timer we fall back to the default per-question budget.
+  const timer = playConfig?.timer;
+  const totalSeconds =
+    timer?.kind === "total" && timer.seconds > 0 ? timer.seconds : undefined;
+  const secondsPerQuestion =
+    timer?.kind === "per_question" && timer.seconds > 0
+      ? timer.seconds
+      : DEFAULT_SECONDS_PER_QUESTION;
 
   function handleComplete(
     answers: UserAnswer[],
@@ -196,7 +242,14 @@ export default function TimedQuizPage() {
       <main className="min-h-[60vh] px-4 py-10 sm:py-16">
         {/* Hidden h1 so the page starts at h1 before the question <h2>s. */}
         <h1 className="sr-only">Timed quiz</h1>
-        <TimedQuiz quiz={quiz} onComplete={handleComplete} />
+        {/* `totalSeconds` (when set) takes precedence inside TimedQuiz; otherwise
+            it uses secondsPerQuestion × N. */}
+        <TimedQuiz
+          quiz={quiz}
+          totalSeconds={totalSeconds}
+          secondsPerQuestion={secondsPerQuestion}
+          onComplete={handleComplete}
+        />
       </main>
     </>
   );

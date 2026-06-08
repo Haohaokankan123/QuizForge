@@ -4,7 +4,7 @@ import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FileQuestion, Info } from "lucide-react";
-import type { Quiz, UserAnswer } from "@/lib/types";
+import type { PlayConfig, Quiz, QuizMode, UserAnswer } from "@/lib/types";
 import { Card } from "@/components/ui";
 import QuizPlayer from "@/components/QuizPlayer";
 
@@ -12,6 +12,8 @@ import QuizPlayer from "@/components/QuizPlayer";
 const ACTIVE_QUIZ_KEY = "qf_active_quiz";
 /** sessionStorage key holding the finished result for the results page. */
 const ACTIVE_RESULT_KEY = "qf_active_result";
+/** sessionStorage key holding the PlayConfig (mode/timer) for this attempt. */
+const PLAY_CONFIG_KEY = "qf_play_config";
 
 /** Shape stashed in sessionStorage for the results page to read. */
 interface StoredResult {
@@ -51,6 +53,32 @@ function readActiveQuiz(): Quiz | null {
   }
 }
 
+// Same stable-snapshot caching as the quiz reader, for the PlayConfig. We only
+// need the play `mode` here; the timer is handled elsewhere (TimedQuiz).
+let cachedConfigRaw: string | null = null;
+let cachedMode: QuizMode = "exam";
+
+function readPlayMode(): QuizMode {
+  try {
+    const raw = sessionStorage.getItem(PLAY_CONFIG_KEY);
+    if (raw === cachedConfigRaw) return cachedMode;
+    cachedConfigRaw = raw;
+    if (!raw) {
+      cachedMode = "exam";
+      return cachedMode;
+    }
+    const parsed = JSON.parse(raw) as PlayConfig;
+    cachedMode =
+      parsed?.mode === "practice" || parsed?.mode === "adaptive"
+        ? parsed.mode
+        : "exam";
+    return cachedMode;
+  } catch {
+    cachedMode = "exam";
+    return cachedMode;
+  }
+}
+
 export default function ActiveQuizPage() {
   const router = useRouter();
   // Lets the user dismiss the "fewer questions than asked" notice.
@@ -69,6 +97,13 @@ export default function ActiveQuizPage() {
     noopSubscribe,
     readActiveQuiz,
     () => null,
+  );
+  // Play mode (exam | practice | adaptive) from the generate page. Defaults to
+  // 'exam' for direct visits / old sessions without a stored PlayConfig.
+  const mode = useSyncExternalStore<QuizMode>(
+    noopSubscribe,
+    readPlayMode,
+    () => "exam",
   );
 
   function handleComplete(answers: UserAnswer[], score: number) {
@@ -142,7 +177,12 @@ export default function ActiveQuizPage() {
           </button>
         </div>
       )}
-      <QuizPlayer quiz={quiz} onComplete={handleComplete} />
+      <QuizPlayer
+        quiz={quiz}
+        onComplete={handleComplete}
+        mode={mode}
+        onExit={() => router.push("/generate")}
+      />
     </main>
   );
 }

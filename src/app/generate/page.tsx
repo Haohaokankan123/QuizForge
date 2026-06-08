@@ -34,6 +34,7 @@ import {
   SkeletonText,
   SegmentedControl,
   Badge,
+  Textarea,
 } from "@/components/ui";
 import InputPicker from "@/components/InputPicker";
 import AppNav from "@/components/AppNav";
@@ -42,7 +43,34 @@ import type {
   Quiz,
   QuestionType,
   Difficulty,
+  SourceType,
+  QuizStyle,
+  QuizMode,
+  PlayConfig,
+  TimerConfig,
 } from "@/lib/types";
+
+/** sessionStorage key for the PlayConfig (mode/timer) the player pages read. */
+export const PLAY_CONFIG_KEY = "qf_play_config";
+
+/** Play-mode options for the segmented control. */
+const MODE_OPTIONS: { value: QuizMode; label: string }[] = [
+  { value: "exam", label: "Exam" },
+  { value: "practice", label: "Practice" },
+  { value: "adaptive", label: "Adaptive" },
+];
+
+/** Phrasing-style options. */
+const STYLE_OPTIONS: { value: QuizStyle; label: string }[] = [
+  { value: "straightforward", label: "Straightforward" },
+  { value: "tricky", label: "Tricky" },
+  { value: "real_world", label: "Real-world" },
+  { value: "quick_recall", label: "Quick recall" },
+];
+
+/** Timer presets. */
+const TOTAL_PRESETS = [5, 10, 20]; // minutes
+const PER_Q_PRESETS = [15, 30, 60]; // seconds
 
 // ---------------------------------------------------------------------------
 // Constants — the selectable options shown in the UI
@@ -95,11 +123,19 @@ export default function GeneratePage() {
 
   // --- Form state ---
   const [content, setContent] = useState("");
-  // Which input produced `content` (paste / file / youtube). Sent to the API
-  // so the resulting Quiz records its true source. InputPicker reports this up.
-  const [sourceType, setSourceType] = useState<
-    "text" | "txt" | "pdf" | "docx" | "youtube"
-  >("text");
+  // Which input produced `content` (paste / file / youtube / ai / photo). Sent to
+  // the API so the resulting Quiz records its true source. InputPicker reports it.
+  const [sourceType, setSourceType] = useState<SourceType>("text");
+  // Which input tab is active (drives whether we show the describe box).
+  const [activeTab, setActiveTab] = useState<
+    "paste" | "upload" | "youtube" | "ai"
+  >("paste");
+  // AI tab: the topic the user described + whether the model may use its own
+  // knowledge. Ignored unless the AI tab is active.
+  const [topic, setTopic] = useState("");
+  const [useOwnKnowledge, setUseOwnKnowledge] = useState(true);
+  // The "describe anything" box (focus/context/instructions) for non-AI tabs.
+  const [focus, setFocus] = useState("");
   // Default: all four types selected (per the task spec).
   const [selectedTypes, setSelectedTypes] = useState<QuestionType[]>([
     "multiple_choice",
@@ -109,8 +145,14 @@ export default function GeneratePage() {
   ]);
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   const [count, setCount] = useState<number>(5);
+  // How the quiz is PLAYED (exam / practice / adaptive) and PHRASED (style).
+  const [mode, setMode] = useState<QuizMode>("exam");
+  const [style, setStyle] = useState<QuizStyle>("straightforward");
   // When on, the generated quiz launches in timed/challenge mode (countdown).
   const [timed, setTimed] = useState(false);
+  // Custom timer config (only used when timed is on).
+  const [timerKind, setTimerKind] = useState<"total" | "per_question">("total");
+  const [timerSeconds, setTimerSeconds] = useState<number>(10 * 60); // default 10 min total
 
   // --- Request state ---
   const [loading, setLoading] = useState(false);
@@ -124,9 +166,12 @@ export default function GeneratePage() {
   const abortRef = useRef<AbortController | null>(null);
 
   // --- Derived validation ---
+  const isAiTab = activeTab === "ai";
   const trimmedLength = content.trim().length;
-  const hasContent = trimmedLength > 0;
+  // The AI tab is valid with a topic (content optional); every other tab needs content.
+  const hasContent = isAiTab ? topic.trim().length > 0 : trimmedLength > 0;
   const hasTypes = selectedTypes.length > 0;
+  // Over-limit applies to real content (and on the AI tab, to optional notes).
   const overLimit = content.length > MAX_CONTENT_CHARS;
   const canSubmit =
     hasContent && hasTypes && !overLimit && !loading && !extracting;
@@ -138,12 +183,18 @@ export default function GeneratePage() {
       return `That's too long — keep it under ${MAX_CONTENT_CHARS.toLocaleString()} characters.`;
     }
     if (!hasContent && !hasTypes) {
-      return "Paste some content and pick at least one question type to begin.";
+      return isAiTab
+        ? "Describe your test and pick at least one question type."
+        : "Add some content and pick at least one question type to begin.";
     }
-    if (!hasContent) return "Paste some study content to generate a quiz.";
+    if (!hasContent) {
+      return isAiTab
+        ? "Describe what you want to be quizzed on."
+        : "Add some study content to generate a quiz.";
+    }
     if (!hasTypes) return "Select at least one question type.";
     return null;
-  }, [extracting, hasContent, hasTypes, overLimit]);
+  }, [extracting, hasContent, hasTypes, overLimit, isAiTab]);
 
   // --- Handlers ---
 
@@ -186,7 +237,13 @@ export default function GeneratePage() {
           types: selectedTypes,
           difficulty,
           count,
-          sourceType,
+          // The AI tab reports its own source type; otherwise use what the picker set.
+          sourceType: isAiTab ? "ai" : sourceType,
+          style,
+          focus: focus.trim() || undefined,
+          ...(isAiTab
+            ? { topic: topic.trim(), useOwnKnowledge }
+            : {}),
         }),
         signal: controller.signal,
       });
@@ -206,11 +263,26 @@ export default function GeneratePage() {
         return;
       }
 
-      // Success: persist the quiz, then go to the player. Timed mode routes to
-      // the countdown variant; otherwise the normal untimed player.
+      // Success: persist the quiz + the play config, then go to the player.
       const quiz = data as Quiz;
       sessionStorage.setItem(ACTIVE_QUIZ_KEY, JSON.stringify(quiz));
-      router.push(timed ? "/quiz/timed" : "/quiz/active");
+
+      // The player pages read this to decide mode (exam/practice/adaptive) and
+      // the timer. Adaptive + practice always use the normal player (instant
+      // feedback lives there); only exam mode honors the timed countdown page.
+      const timer: TimerConfig = { kind: timerKind, seconds: timerSeconds };
+      const useTimed = timed && mode === "exam";
+      const playConfig: PlayConfig = {
+        mode,
+        timed: useTimed,
+        ...(useTimed ? { timer } : {}),
+      };
+      try {
+        sessionStorage.setItem(PLAY_CONFIG_KEY, JSON.stringify(playConfig));
+      } catch {
+        // Non-critical: the player falls back to exam/no-timer defaults.
+      }
+      router.push(useTimed ? "/quiz/timed" : "/quiz/active");
     } catch (err) {
       // An abort (user pressed Cancel, or the timeout fired) is not a real error
       // — show a calm, actionable message instead of a scary network one.
@@ -246,7 +318,9 @@ export default function GeneratePage() {
     <>
       <AppNav />
       <AuthGuard>
-      <main className="mx-auto w-full max-w-3xl px-5 py-12 sm:px-6 sm:py-16">
+      {/* pt-10/pt-14 gives clear breathing room below the sticky AppNav so the
+          page header never visually collides with / bleeds into the top bar. */}
+      <main className="mx-auto w-full max-w-3xl px-5 pb-12 pt-10 sm:px-6 sm:pb-16 sm:pt-14">
         {/* Header */}
       <motion.header
         {...fadeUp}
@@ -277,16 +351,83 @@ export default function GeneratePage() {
           }
           className="flex flex-col gap-6"
         >
-          {/* Source content — paste / upload / YouTube via the tabbed picker. */}
-          <Card padding="lg" className="flex flex-col gap-3">
+          {/* Source content — paste / upload / YouTube / AI via the tabbed picker. */}
+          <Card padding="lg" className="flex flex-col gap-4">
             <InputPicker
               value={content}
               onChange={setContent}
               onExtractingChange={setExtracting}
               onSourceTypeChange={setSourceType}
+              onActiveTabChange={setActiveTab}
+              onTopicChange={setTopic}
+              onUseOwnKnowledgeChange={setUseOwnKnowledge}
               maxChars={MAX_CONTENT_CHARS}
               disabled={loading}
             />
+
+            {/* Over-limit notice + auto-trim (applies to pasted text + merged files). */}
+            {overLimit && (
+              <div
+                role="alert"
+                className="flex flex-col gap-2 rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3"
+              >
+                <p className="text-sm text-foreground">
+                  Your material is{" "}
+                  <span className="font-semibold tabular-nums">
+                    {content.length.toLocaleString()}
+                  </span>{" "}
+                  characters — the limit is{" "}
+                  <span className="font-semibold tabular-nums">
+                    {MAX_CONTENT_CHARS.toLocaleString()}
+                  </span>
+                  . Remove about{" "}
+                  <span className="font-semibold tabular-nums">
+                    {(content.length - MAX_CONTENT_CHARS).toLocaleString()}
+                  </span>{" "}
+                  characters, or trim it automatically.
+                </p>
+                <div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() =>
+                      setContent(
+                        content.slice(0, MAX_CONTENT_CHARS) +
+                          "\n\n(shortened to fit the limit)",
+                      )
+                    }
+                  >
+                    Use the first {MAX_CONTENT_CHARS.toLocaleString()} characters
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* "Describe anything" box — focus / context / instructions. Hidden on
+                the AI tab (its own prompt area already covers this). */}
+            {!isAiTab && (
+              <div className="flex flex-col gap-1.5">
+                <label
+                  htmlFor="describe-box"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Anything specific?{" "}
+                  <span className="font-normal text-foreground-muted">
+                    (optional)
+                  </span>
+                </label>
+                <Textarea
+                  id="describe-box"
+                  label="Describe anything"
+                  hideLabel
+                  rows={2}
+                  value={focus}
+                  onChange={(e) => setFocus(e.target.value)}
+                  placeholder="Focus areas, context, or instructions — e.g. 'focus on chapter 3, make it exam-style, emphasize formulas.'"
+                  disabled={loading}
+                />
+              </div>
+            )}
           </Card>
 
           {/* Options */}
@@ -342,6 +483,37 @@ export default function GeneratePage() {
                 options={DIFFICULTY_OPTIONS}
                 value={difficulty}
                 onChange={setDifficulty}
+              />
+            </div>
+
+            {/* Play mode */}
+            <div className="flex flex-col gap-3">
+              <span className="text-sm font-medium text-foreground">Mode</span>
+              <SegmentedControl<QuizMode>
+                ariaLabel="Quiz mode"
+                options={MODE_OPTIONS}
+                value={mode}
+                onChange={setMode}
+              />
+              <span className="text-xs text-foreground-muted">
+                {mode === "exam"
+                  ? "Exam: answers at the end. You can go back and change them."
+                  : mode === "practice"
+                    ? "Practice: instant feedback + explanation after each question."
+                    : "Adaptive: instant feedback, and the difficulty adjusts as you go."}
+              </span>
+            </div>
+
+            {/* Question style */}
+            <div className="flex flex-col gap-3">
+              <span className="text-sm font-medium text-foreground">
+                Question style
+              </span>
+              <SegmentedControl<QuizStyle>
+                ariaLabel="Question style"
+                options={STYLE_OPTIONS}
+                value={style}
+                onChange={setStyle}
               />
             </div>
 
@@ -464,6 +636,88 @@ export default function GeneratePage() {
                 />
               </button>
             </div>
+
+            {/* Custom timer controls — only when Timed is on. (Timed applies to
+                exam mode; practice/adaptive give instant feedback instead.) */}
+            {timed && (
+              <div className="flex flex-col gap-3 rounded-2xl border border-border bg-bg-elevated/50 p-4">
+                {mode !== "exam" && (
+                  <p className="text-xs text-warning">
+                    Heads up: the timer only runs in Exam mode. In{" "}
+                    {mode === "practice" ? "Practice" : "Adaptive"} mode you get
+                    instant feedback instead of a countdown.
+                  </p>
+                )}
+                {/* Total vs per-question */}
+                <SegmentedControl<"total" | "per_question">
+                  ariaLabel="Timer type"
+                  options={[
+                    { value: "total", label: "Total time" },
+                    { value: "per_question", label: "Per question" },
+                  ]}
+                  value={timerKind}
+                  onChange={(k) => {
+                    setTimerKind(k);
+                    // Reset to a sensible default for the chosen kind.
+                    setTimerSeconds(k === "total" ? 10 * 60 : 30);
+                  }}
+                />
+                {/* Presets + custom number */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {(timerKind === "total" ? TOTAL_PRESETS : PER_Q_PRESETS).map(
+                    (preset) => {
+                      const secs =
+                        timerKind === "total" ? preset * 60 : preset;
+                      const active = timerSeconds === secs;
+                      return (
+                        <button
+                          key={preset}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => setTimerSeconds(secs)}
+                          className={[
+                            "inline-flex h-11 min-w-12 items-center justify-center rounded-2xl border px-3 text-sm font-semibold tabular-nums",
+                            "cursor-pointer transition-colors duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base",
+                            active
+                              ? "border-accent bg-accent/15 text-foreground"
+                              : "border-border bg-bg-elevated text-foreground-muted hover:text-foreground hover:border-white/15",
+                          ].join(" ")}
+                        >
+                          {timerKind === "total" ? `${preset} min` : `${preset}s`}
+                        </button>
+                      );
+                    },
+                  )}
+                  {/* Custom value */}
+                  <label className="inline-flex items-center gap-2 text-sm text-foreground-muted">
+                    <span>Custom</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      aria-label={
+                        timerKind === "total"
+                          ? "Custom total minutes"
+                          : "Custom seconds per question"
+                      }
+                      value={
+                        timerKind === "total"
+                          ? Math.round(timerSeconds / 60)
+                          : timerSeconds
+                      }
+                      onChange={(e) => {
+                        const n = parseInt(e.target.value, 10);
+                        if (Number.isNaN(n) || n < 1) return;
+                        setTimerSeconds(timerKind === "total" ? n * 60 : n);
+                      }}
+                      className="h-11 w-20 rounded-2xl border border-border bg-bg-elevated px-3 text-center text-base font-semibold tabular-nums text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base"
+                    />
+                    <span>{timerKind === "total" ? "min" : "sec"}</span>
+                  </label>
+                </div>
+              </div>
+            )}
           </Card>
 
           {/* Error banner */}

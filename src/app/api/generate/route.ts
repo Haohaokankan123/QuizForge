@@ -38,7 +38,13 @@ import { countQuizzesThisWeek, saveGeneratedQuiz } from '@/lib/quizzes';
 
 // We only need the types at compile time (`import type` keeps them out of the
 // runtime bundle). These are the shared QuizForge shapes.
-import type { GenerateRequest, QuestionType, Difficulty } from '@/lib/types';
+import type {
+  GenerateRequest,
+  QuestionType,
+  Difficulty,
+  QuizStyle,
+  QuizConfig,
+} from '@/lib/types';
 
 // Force the Node.js runtime (not Edge). The AI engine and process.env access
 // expect a full Node environment, so we pin it explicitly.
@@ -59,14 +65,26 @@ const VALID_TYPES: QuestionType[] = [
 // The only difficulties we accept.
 const VALID_DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
 
-// The source types a Quiz may declare. This slice only sends 'text', but we
-// validate against the full set so the route is correct as more inputs land.
+// The source types a Quiz may declare. We validate against the full set so the
+// route accepts every input the app can produce — including 'ai' (topic-driven,
+// content may be empty) and 'photo' (text already OCR'd from an image).
 const VALID_SOURCE_TYPES: GenerateRequest['sourceType'][] = [
   'text',
   'txt',
   'pdf',
   'docx',
   'youtube',
+  'ai',
+  'photo',
+];
+
+// The only phrasing styles we accept. Optional on the request; when omitted the
+// AI engine defaults to 'straightforward'.
+const VALID_STYLES: QuizStyle[] = [
+  'straightforward',
+  'tricky',
+  'real_world',
+  'quick_recall',
 ];
 
 /** Small helper: returns the request body parsed as JSON, or null if it can't. */
@@ -95,10 +113,37 @@ function validateBody(
 
   const b = body as Record<string, unknown>;
 
-  // --- content: non-empty string ---
-  if (typeof b.content !== 'string' || b.content.trim().length === 0) {
+  // --- sourceType: one of the allowed source kinds (validated early because it
+  //     decides whether `content` may be empty — the AI tab is topic-driven). ---
+  if (
+    typeof b.sourceType !== 'string' ||
+    !VALID_SOURCE_TYPES.includes(
+      b.sourceType as GenerateRequest['sourceType'],
+    )
+  ) {
+    return { ok: false, error: 'Invalid source type.' };
+  }
+  const sourceType = b.sourceType as GenerateRequest['sourceType'];
+
+  // --- topic: required (non-empty) ONLY for the AI tab; optional otherwise. ---
+  const topic =
+    typeof b.topic === 'string' && b.topic.trim().length > 0
+      ? b.topic
+      : undefined;
+
+  // --- content + the AI-tab exception ---
+  // For 'ai' the content may be empty as long as a topic is provided. Every
+  // other source type still requires real, non-empty study content.
+  const hasContent = typeof b.content === 'string' && b.content.trim().length > 0;
+  if (sourceType === 'ai') {
+    if (!topic) {
+      return { ok: false, error: 'Describe what you want to be quizzed on.' };
+    }
+  } else if (!hasContent) {
     return { ok: false, error: 'Please provide some source content to study.' };
   }
+  // Normalize content to a string ('' is valid for the AI tab with a topic).
+  const content = typeof b.content === 'string' ? b.content : '';
 
   // --- types: a non-empty array, every item one of the 4 valid types ---
   if (!Array.isArray(b.types) || b.types.length === 0) {
@@ -137,25 +182,42 @@ function validateBody(
   }
   const count = b.count;
 
-  // --- sourceType: one of the allowed source kinds ---
-  if (
-    typeof b.sourceType !== 'string' ||
-    !VALID_SOURCE_TYPES.includes(
-      b.sourceType as GenerateRequest['sourceType'],
-    )
-  ) {
-    return { ok: false, error: 'Invalid source type.' };
+  // --- style: optional; when present it must be one of the valid phrasings. ---
+  let style: QuizStyle | undefined;
+  if (b.style !== undefined) {
+    if (
+      typeof b.style !== 'string' ||
+      !VALID_STYLES.includes(b.style as QuizStyle)
+    ) {
+      return { ok: false, error: 'Invalid quiz style.' };
+    }
+    style = b.style as QuizStyle;
   }
-  const sourceType = b.sourceType as GenerateRequest['sourceType'];
+
+  // --- focus: optional free-form text. Trim; treat empty as absent. ---
+  const focus =
+    typeof b.focus === 'string' && b.focus.trim().length > 0
+      ? b.focus
+      : undefined;
+
+  // --- useOwnKnowledge: optional boolean (AI tab). ---
+  const useOwnKnowledge =
+    typeof b.useOwnKnowledge === 'boolean' ? b.useOwnKnowledge : undefined;
 
   return {
     ok: true,
     value: {
-      content: b.content,
+      content,
       types,
       difficulty,
       count,
       sourceType,
+      // Only include the optional fields when present so the engine sees a clean
+      // request (and undefined keys don't leak into the persisted config).
+      ...(style !== undefined ? { style } : {}),
+      ...(focus !== undefined ? { focus } : {}),
+      ...(topic !== undefined ? { topic } : {}),
+      ...(useOwnKnowledge !== undefined ? { useOwnKnowledge } : {}),
     },
   };
 }
@@ -239,7 +301,21 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: message }, { status: 400 });
   }
 
-  // 7. Save the generated quiz to the DB for this user (best-effort). If the
+  // 7. Build the QuizConfig to persist alongside the quiz, derived from the
+  //    request's generation settings. mode/timed/timer are play-time choices the
+  //    generate page carries separately (sessionStorage), so they aren't on this
+  //    request — only style/focus/sourceType are known here. We attach the config
+  //    to the quiz so saveGeneratedQuiz can store it in the nullable jsonb column.
+  const req2 = validated.value;
+  const config: QuizConfig = {
+    ...(req2.style !== undefined ? { style: req2.style } : {}),
+    ...(req2.focus !== undefined ? { focus: req2.focus } : {}),
+    sourceType: req2.sourceType,
+  };
+  // Prefer any config the engine already set; otherwise use the one we derived.
+  quiz.config = quiz.config ?? config;
+
+  // 8. Save the generated quiz to the DB for this user (best-effort). If the
   //    save fails we still return the quiz so the user can take it — they just
   //    won't see it in their saved history. The DB row id (if any) is attached
   //    as `db_id` so later screens can link the attempt to the quiz.

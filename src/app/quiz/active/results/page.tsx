@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import {
+  BookOpen,
   Check,
   FileDown,
   FileQuestion,
@@ -13,9 +15,10 @@ import {
   RotateCcw,
   Share2,
   Sparkles,
+  Target,
   X,
 } from "lucide-react";
-import type { Quiz, UserAnswer } from "@/lib/types";
+import type { Quiz, Question, UserAnswer } from "@/lib/types";
 import { Badge, Button, Card } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { buildShareUrl } from "@/lib/share";
@@ -203,6 +206,190 @@ export default function ResultsPage() {
     }
   }
 
+  // --- Retry my mistakes ----------------------------------------------------
+  // The questions the user got wrong (or skipped). We re-quiz the SAME concepts
+  // with NEW questions so retrying isn't just memorising the same items.
+  const missedQuestions = useMemo<Question[]>(() => {
+    if (!result) return [];
+    return result.quiz.questions.filter((q) => !answerByQ.get(q.id)?.correct);
+  }, [result, answerByQ]);
+
+  // "idle" | "working" | "error" — drives the "Retry my mistakes" button. The
+  // request can take a while (it hits the same AI engine /api/generate uses), so
+  // we show a spinner and surface failures inline rather than failing silently.
+  const [retryState, setRetryState] = useState<"idle" | "working" | "error">(
+    "idle",
+  );
+
+  // Build a focused re-quiz of the missed concepts and route into the player.
+  // We reuse the existing /api/generate contract: sourceType 'ai' +
+  // useOwnKnowledge so the model writes NEW questions on the same underlying
+  // ideas (described in `topic`) rather than copying the missed ones verbatim.
+  async function handleRetryMistakes() {
+    if (!result || missedQuestions.length === 0) return;
+    setRetryState("working");
+
+    // Describe exactly what to re-test: the prompt + correct answer of each miss.
+    const conceptList = missedQuestions
+      .map((q, i) => `${i + 1}. Q: ${q.prompt} (Answer: ${q.answer})`)
+      .join("\n");
+
+    // At least 3 questions so a single miss still yields a worthwhile re-quiz.
+    const count = Math.max(3, missedQuestions.length);
+
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          // Keep the SAME types + difficulty as the original quiz so the retry
+          // matches the user's chosen format.
+          content: "",
+          types: Array.from(new Set(result.quiz.questions.map((q) => q.type))),
+          difficulty: result.quiz.difficulty,
+          count,
+          sourceType: "ai",
+          useOwnKnowledge: true,
+          topic: `Re-test these specific concepts the student got wrong:\n${conceptList}`,
+          focus:
+            "Make NEW questions testing the same underlying concepts as these missed ones, do not copy them verbatim.",
+        }),
+      });
+
+      // Read the body once; it's either a Quiz or { error }.
+      const data: unknown = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setRetryState("error");
+        setTimeout(() => setRetryState("idle"), 2500);
+        return;
+      }
+
+      // Success: stash the focused re-quiz, clear the stale result, play it.
+      const quiz = data as Quiz;
+      try {
+        sessionStorage.setItem(ACTIVE_QUIZ_KEY, JSON.stringify(quiz));
+        sessionStorage.removeItem(ACTIVE_RESULT_KEY);
+      } catch {
+        // best effort
+      }
+      router.push("/quiz/active");
+    } catch {
+      setRetryState("error");
+      setTimeout(() => setRetryState("idle"), 2500);
+    }
+  }
+
+  // --- Study guide ----------------------------------------------------------
+  // "idle" | "working" | "ready" | "error" — drives the "Study guide" button and
+  // whether the rendered guide Card is shown.
+  const [guideState, setGuideState] = useState<
+    "idle" | "working" | "ready" | "error"
+  >("idle");
+  // The returned Markdown, rendered below once `guideState === "ready"`.
+  const [guideMarkdown, setGuideMarkdown] = useState<string>("");
+  // A human-readable failure reason, shown when guideState === "error".
+  const [guideError, setGuideError] = useState<string>("");
+
+  // Request a study guide from the quiz itself. The results page doesn't keep the
+  // raw source material, so we reconstruct study material from each question's
+  // prompt + answer + explanation + source quote and send THAT as the content.
+  async function handleStudyGuide() {
+    if (!result) return;
+
+    // If we already built one this session, just reveal it again.
+    if (guideState === "ready" && guideMarkdown) {
+      setGuideState("ready");
+      return;
+    }
+
+    setGuideState("working");
+    setGuideError("");
+
+    const material = result.quiz.questions
+      .map((q, i) => {
+        const parts = [`${i + 1}. ${q.prompt}`, `Answer: ${q.answer}`];
+        if (q.explanation) parts.push(`Why: ${q.explanation}`);
+        if (q.source_quote) parts.push(`Source: "${q.source_quote}"`);
+        return parts.join("\n");
+      })
+      .join("\n\n");
+
+    try {
+      const res = await fetch("/api/study-guide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: material }),
+      });
+
+      const data: unknown = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        // Surface the route's friendly { error } (e.g. "Please sign in…").
+        const msg =
+          data && typeof data === "object" && "error" in data
+            ? String((data as { error: unknown }).error)
+            : "Couldn't make a study guide. Try again.";
+        setGuideError(msg);
+        setGuideState("error");
+        setTimeout(() => setGuideState("idle"), 3000);
+        return;
+      }
+
+      // The route returns Markdown under { guide } (its documented contract).
+      // Keep { markdown } / bare-string as defensive fallbacks.
+      const md =
+        data && typeof data === "object" && data !== null
+          ? String(
+              (data as { guide?: unknown; markdown?: unknown }).guide ??
+                (data as { markdown?: unknown }).markdown ??
+                "",
+            )
+          : typeof data === "string"
+            ? data
+            : "";
+
+      if (!md.trim()) {
+        setGuideError("The study guide came back empty. Try again.");
+        setGuideState("error");
+        setTimeout(() => setGuideState("idle"), 3000);
+        return;
+      }
+
+      setGuideMarkdown(md);
+      setGuideState("ready");
+    } catch {
+      setGuideError("Couldn't reach the server. Check your connection and try again.");
+      setGuideState("error");
+      setTimeout(() => setGuideState("idle"), 3000);
+    }
+  }
+
+  // Print just the study guide (browser print dialog -> "Save as PDF"). The quiz
+  // PDF export (exportQuizToPdf) is built from a Quiz, not free Markdown, so for
+  // the guide we use a self-contained print window instead.
+  function handlePrintGuide() {
+    if (!guideMarkdown.trim()) return;
+    const win = window.open("", "_blank", "noopener,noreferrer");
+    if (!win) return;
+    const title = `${result?.quiz.title ?? "Study guide"} — Study guide`;
+    // Render the Markdown to safe, escaped HTML for the print document.
+    win.document.write(
+      `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(
+        title,
+      )}</title><style>` +
+        "body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:42rem;margin:2.5rem auto;padding:0 1.25rem;color:#111;line-height:1.6}" +
+        "h1{font-size:1.6rem}h2{font-size:1.25rem;margin-top:1.6rem}h3{font-size:1.05rem;margin-top:1.2rem}" +
+        "ul{padding-left:1.25rem}li{margin:.25rem 0}p{margin:.6rem 0}" +
+        "</style></head><body>" +
+        markdownToHtml(guideMarkdown) +
+        "</body></html>",
+    );
+    win.document.close();
+    win.focus();
+    win.print();
+  }
+
   if (!mounted) {
     return (
       <main className="flex min-h-dvh items-center justify-center px-4">
@@ -322,7 +509,28 @@ export default function ResultsPage() {
             </Link>
           </div>
 
-          {/* Secondary actions: study, share, export */}
+          {/* Retry just the missed concepts — only shown when something was
+              wrong. Builds a fresh AI re-quiz of those ideas and plays it. */}
+          {missedQuestions.length > 0 && (
+            <div className="mt-1 flex w-full flex-col items-center gap-1">
+              <Button
+                onClick={handleRetryMistakes}
+                loading={retryState === "working"}
+                leftIcon={<Target size={18} aria-hidden="true" />}
+              >
+                {retryState === "working"
+                  ? "Building re-quiz…"
+                  : `Retry my mistakes (${missedQuestions.length})`}
+              </Button>
+              {retryState === "error" && (
+                <p className="text-xs text-destructive">
+                  Couldn&apos;t build a re-quiz. Please try again.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Secondary actions: study, guide, share, export */}
           <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
             <Button
               onClick={handleFlashcards}
@@ -331,6 +539,15 @@ export default function ResultsPage() {
               leftIcon={<Layers size={16} aria-hidden="true" />}
             >
               Flashcards
+            </Button>
+            <Button
+              onClick={handleStudyGuide}
+              variant="ghost"
+              size="sm"
+              loading={guideState === "working"}
+              leftIcon={<BookOpen size={16} aria-hidden="true" />}
+            >
+              {guideState === "error" ? "Guide failed" : "Study guide"}
             </Button>
             <Button
               onClick={handleShare}
@@ -354,8 +571,42 @@ export default function ResultsPage() {
               {pdfState === "error" ? "Export failed" : "Download PDF"}
             </Button>
           </div>
+          {/* Study-guide failure reason (surfaces the route's friendly message). */}
+          {guideState === "error" && guideError && (
+            <p role="alert" className="text-sm text-destructive">
+              {guideError}
+            </p>
+          )}
         </Card>
       </motion.div>
+
+      {/* Study guide — rendered once the AI returns one. Self-contained: a
+          Markdown render plus a print-to-PDF action. */}
+      {guideState === "ready" && guideMarkdown && (
+        <motion.div
+          initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={reduceMotion ? { duration: 0 } : { duration: 0.4, ease: EASE }}
+        >
+          <Card padding="lg" className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-accent">
+                <BookOpen size={15} aria-hidden="true" />
+                Study guide
+              </h2>
+              <Button
+                onClick={handlePrintGuide}
+                variant="ghost"
+                size="sm"
+                leftIcon={<FileDown size={16} aria-hidden="true" />}
+              >
+                Download PDF
+              </Button>
+            </div>
+            <Markdown source={guideMarkdown} />
+          </Card>
+        </motion.div>
+      )}
 
       {/* Per-question review */}
       <section className="flex flex-col gap-4" aria-label="Answer review">
@@ -488,4 +739,146 @@ function AnswerRow({ label, value, tone }: AnswerRowProps) {
       <span className="text-sm text-foreground">{value}</span>
     </div>
   );
+}
+
+// --- Minimal Markdown rendering ---------------------------------------------
+// No markdown library is bundled, so we render a useful subset of the Markdown
+// the AI study guide returns: ATX headings (#, ##, ###), unordered lists
+// (- / *), and paragraphs. Inline **bold** is supported within a line. This is
+// intentionally small — full CommonMark is out of scope for a study guide.
+
+/** Escape HTML-special characters so user/AI text can't inject markup. */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** Apply inline **bold** to an already-escaped line. */
+function inlineBold(escaped: string): string {
+  return escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+}
+
+/**
+ * Convert a small Markdown subset to an HTML string (used for the print window).
+ * Input is escaped first, so the result is safe to inject.
+ */
+function markdownToHtml(md: string): string {
+  const lines = md.replace(/\r\n/g, "\n").split("\n");
+  const out: string[] = [];
+  let inList = false;
+
+  const closeList = () => {
+    if (inList) {
+      out.push("</ul>");
+      inList = false;
+    }
+  };
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const heading = /^(#{1,3})\s+(.*)$/.exec(line);
+    const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
+
+    if (heading) {
+      closeList();
+      const level = heading[1].length;
+      out.push(`<h${level}>${inlineBold(escapeHtml(heading[2]))}</h${level}>`);
+    } else if (bullet) {
+      if (!inList) {
+        out.push("<ul>");
+        inList = true;
+      }
+      out.push(`<li>${inlineBold(escapeHtml(bullet[1]))}</li>`);
+    } else if (line.trim().length === 0) {
+      closeList();
+    } else {
+      closeList();
+      out.push(`<p>${inlineBold(escapeHtml(line))}</p>`);
+    }
+  }
+  closeList();
+  return out.join("\n");
+}
+
+/**
+ * Render the same Markdown subset as React nodes for on-page display. Mirrors
+ * markdownToHtml's parsing so the screen and the printed PDF stay consistent.
+ */
+function Markdown({ source }: { source: string }) {
+  const blocks: ReactNode[] = [];
+  const lines = source.replace(/\r\n/g, "\n").split("\n");
+
+  let listItems: string[] = [];
+  let key = 0;
+
+  /** Render an inline string with **bold** spans into React nodes. */
+  const renderInline = (text: string): ReactNode[] =>
+    text.split(/(\*\*.+?\*\*)/g).map((part, i) =>
+      /^\*\*.+\*\*$/.test(part) ? (
+        <strong key={i}>{part.slice(2, -2)}</strong>
+      ) : (
+        <span key={i}>{part}</span>
+      ),
+    );
+
+  const flushList = () => {
+    if (listItems.length === 0) return;
+    blocks.push(
+      <ul key={`ul-${key++}`} className="list-disc space-y-1 pl-5 text-sm leading-relaxed text-foreground-muted">
+        {listItems.map((item, i) => (
+          <li key={i}>{renderInline(item)}</li>
+        ))}
+      </ul>,
+    );
+    listItems = [];
+  };
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const heading = /^(#{1,3})\s+(.*)$/.exec(line);
+    const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
+
+    if (heading) {
+      flushList();
+      const level = heading[1].length;
+      const text = renderInline(heading[2]);
+      if (level === 1) {
+        blocks.push(
+          <h3 key={`h-${key++}`} className="text-base font-semibold text-foreground">
+            {text}
+          </h3>,
+        );
+      } else if (level === 2) {
+        blocks.push(
+          <h4 key={`h-${key++}`} className="text-sm font-semibold text-foreground">
+            {text}
+          </h4>,
+        );
+      } else {
+        blocks.push(
+          <h5 key={`h-${key++}`} className="text-sm font-medium text-foreground">
+            {text}
+          </h5>,
+        );
+      }
+    } else if (bullet) {
+      listItems.push(bullet[1]);
+    } else if (line.trim().length === 0) {
+      flushList();
+    } else {
+      flushList();
+      blocks.push(
+        <p key={`p-${key++}`} className="text-sm leading-relaxed text-foreground-muted">
+          {renderInline(line)}
+        </p>,
+      );
+    }
+  }
+  flushList();
+
+  return <div className="flex flex-col gap-2">{blocks}</div>;
 }

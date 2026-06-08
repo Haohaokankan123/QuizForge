@@ -57,6 +57,14 @@ const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODEL_NAME = 'openai/gpt-oss-120b';
 
 /**
+ * Groq's free VISION model, used ONLY to read text out of an uploaded photo
+ * (handwritten notes, a textbook page). gpt-oss-120b is text-only, so the photo
+ * path uses this multimodal model for OCR-style extraction, then the normal
+ * text engine builds the quiz. If Groq deprecates/renames this, update here.
+ */
+const VISION_MODEL_NAME = 'meta-llama/llama-4-scout-17b-16e-instruct';
+
+/**
  * Groq free-tier tokens-per-minute cap for MODEL_NAME (prompt + output combined).
  * gpt-oss-120b = 8,000 (lower than llama-3.3-70b's 12,000). Used to size the
  * output budget so we never exceed it (HTTP 413). If you change MODEL_NAME,
@@ -147,6 +155,29 @@ function difficultyExamples(difficulty: string): string {
  * the real guarantee. (The literal word "JSON" must also appear in the messages,
  * or Groq rejects the request — it does, both here and in the system message.)
  */
+/** A phrasing-style instruction block. Style changes HOW questions read, not the
+ *  difficulty. Returns '' for the default so the base prompt is unchanged. */
+function styleGuide(style: GenerateRequest['style']): string {
+  switch (style) {
+    case 'tricky':
+      return `\nPHRASING STYLE = TRICKY / EXAM-STYLE: write questions the way a tough teacher would — include subtle, plausible traps in the WRONG options (common misconceptions, off-by-one, look-alikes). Never make the answer obvious by length or being the only on-topic option. (The correct answer is still 100% defensible from the material.)`;
+    case 'real_world':
+      return `\nPHRASING STYLE = REAL-WORLD SCENARIOS: frame each question as a concrete, realistic situation where the concept/term/formula is APPLIED, then ask what fits. Avoid bare "what does X mean?" — show it in use.`;
+    case 'quick_recall':
+      return `\nPHRASING STYLE = QUICK RECALL: short, fast, direct prompts that test one fact/term each. Keep prompts brief; no long scenarios.`;
+    case 'straightforward':
+    default:
+      return '';
+  }
+}
+
+/** A focus/instructions block from the user's free-form "describe anything" box. */
+function focusGuide(focus: string | undefined): string {
+  const f = (focus ?? '').trim();
+  if (!f) return '';
+  return `\nUSER INSTRUCTIONS / FOCUS (follow these — they describe what the student wants emphasized; weight questions toward this, but stay grounded in the rules above): "${f}"`;
+}
+
 function buildPrompt(
   req: GenerateRequest,
   count: number,
@@ -221,6 +252,8 @@ ${requestedTypes}
 
 Before finalizing, RE-READ and check: (a) did I produce EXACTLY ${count} questions? (count them) (b) does any prompt give away its own answer? (c) does each question match the LEVEL OF THINKING for difficulty="${req.difficulty}" — easy = recall one stated fact/term/value; medium = apply the concept to a familiar case; hard = REASON (multi-step, compare, infer cause/effect, evaluate, trace, or apply to a NEW situation; for math/code a worked WORD PROBLEM or code-trace). For HARD specifically, ask of EACH question: "could a student answer this just by locating one stated fact, date, name, count, or definition?" — if yes it is TOO EASY for hard: rewrite it to require reasoning, or DROP it (never relabel recall as hard). (d) for any multiple_choice, are the 3 wrong options genuinely confusable with the answer (not throwaway)? A student must NOT be able to answer any question by copying a single source sentence verbatim. (e) MATERIAL-TYPE CHECK: for EACH question, does it test the actual thing being taught (the vocab WORD, the formula, the key idea) — and NOT a detail from an example sentence/story? If this is a vocabulary list, is the answer to every question one of the listed words (or its meaning), with zero questions about what happened in an example sentence? If any question tests an example's incidental details instead of the concept, DELETE it and replace it with one that tests the word/concept. If any check fails, fix it before responding.
 
+${styleGuide(req.style)}${focusGuide(req.focus)}
+
 Respond with ONLY a single JSON object (no markdown, no commentary) in EXACTLY this shape:
 {
   "title": "string — a short, descriptive title for the quiz based on the source",
@@ -240,6 +273,68 @@ SOURCE:
 """
 ${req.content}
 """${avoidBlock}`;
+}
+
+/**
+ * AI-tab prompt builder. Used when sourceType === 'ai': the user DESCRIBED a test
+ * (topic + what to focus on) instead of providing study material. Here the model
+ * MAY use its own accurate knowledge of the topic (optionally blended with any
+ * notes the user pasted). Grounding is relaxed (there is no source to quote), but
+ * all the QUALITY rules still apply: real questions that test understanding,
+ * difficulty calibration, style, no self-answering, "test the concept not an
+ * example". Returns the SAME JSON shape; source_quote becomes a short rationale.
+ */
+function buildAiPrompt(
+  req: GenerateRequest,
+  count: number,
+  existingPrompts: string[] = [],
+): string {
+  const requestedTypes = req.types
+    .map((t) => `- ${t}: ${TYPE_LABELS[t]}`)
+    .join('\n');
+  const avoidBlock =
+    existingPrompts.length > 0
+      ? `\n\nDO NOT REPEAT these questions you already wrote — make DIFFERENT ones:\n${existingPrompts
+          .map((p) => `- ${p}`)
+          .join('\n')}\n`
+      : '';
+  const notesBlock =
+    req.content && req.content.trim().length > 0
+      ? `\n\nThe student also provided these NOTES to focus on (prioritize this material, and you may extend it with accurate related knowledge):\n"""\n${req.content}\n"""`
+      : '';
+
+  return `You are an EXPERT exam writer. The student did NOT upload study material — they DESCRIBED the test they want. Use your own ACCURATE knowledge of the topic to write a high-quality quiz. Only include facts you are confident are correct; never invent facts. A weak, obvious, or self-answering question is a FAILURE.
+
+TOPIC / TEST DESCRIPTION (what to quiz on):
+"""
+${req.topic ?? ''}
+"""${notesBlock}
+
+RULES:
+1. Write ${count} questions that genuinely TEST understanding of the described topic. Cover DIFFERENT sub-ideas — never test the same point twice.
+2. Only use facts you are confident are TRUE. If the topic is too narrow for ${count} good questions, write FEWER rather than padding or inventing.
+3. NEVER let a question reveal its own answer. Test the CONCEPT, never an incidental detail of an example you make up.
+4. Only generate these requested TYPES:
+${requestedTypes}
+5. DIFFICULTY = "${req.difficulty}". ${difficultyGuide(req.difficulty)}
+6. "multiple_choice": exactly 4 distinct options, "answer" = the full option text verbatim, options similar in length/style, vary the correct position, no "all/none of the above". "true_false": options exactly ["True","False"]. "fill_blank": a NEW sentence with "____"; "answer" is the missing term. "short_answer": brief "answer", no options.
+7. For each question, "source_quote" should be a SHORT factual rationale (1 sentence) for why the answer is correct (there is no uploaded source, so this is your justification — keep it accurate).
+${styleGuide(req.style)}${focusGuide(req.focus)}
+
+Respond with ONLY a single JSON object (no markdown, no commentary) in EXACTLY this shape:
+{
+  "title": "string — a short, descriptive title based on the topic",
+  "questions": [
+    {
+      "type": "one of: multiple_choice | true_false | fill_blank | short_answer",
+      "prompt": "string — the question text",
+      "options": ["string", "..."],
+      "answer": "string — the correct answer (for MC, exactly one of the options)",
+      "explanation": "string — why the answer is correct",
+      "source_quote": "string — a short factual rationale for the answer"
+    }
+  ]
+}${avoidBlock}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -487,7 +582,13 @@ export async function generateQuiz(req: GenerateRequest): Promise<Quiz> {
   }
 
   // --- 2. Guard against an empty source ---
-  if (!isNonEmptyString(req.content)) {
+  // The AI tab is driven by `topic` (content is optional), so it's valid as long
+  // as a topic is present. Every other source requires real content.
+  if (req.sourceType === 'ai') {
+    if (!isNonEmptyString(req.topic)) {
+      throw new Error('Describe what you want to be quizzed on to use the AI tab.');
+    }
+  } else if (!isNonEmptyString(req.content)) {
     throw new Error('Cannot generate a quiz from empty source content.');
   }
 
@@ -501,7 +602,9 @@ export async function generateQuiz(req: GenerateRequest): Promise<Quiz> {
   // prompt-scaffold tokens + ~2,200 reasoning/output tokens + 800 margin stays
   // under 8,000. (Was 24,000 under the old 12k cap with no reasoning model.)
   const SAFE_CHARS_PER_REQUEST = 9000; // ~2.2k words; leaves room for prompt+reasoning+output
-  if (req.content.length > SAFE_CHARS_PER_REQUEST) {
+  // The AI tab (sourceType 'ai') is driven by a short topic prompt, not a large
+  // uploaded source, so it never needs chunking even if the user added notes.
+  if (req.sourceType !== 'ai' && req.content.length > SAFE_CHARS_PER_REQUEST) {
     return generateQuizFromChunks(req, apiKey, SAFE_CHARS_PER_REQUEST);
   }
 
@@ -583,7 +686,12 @@ async function collectQuestions(
     const remaining = count - collected.length;
     const askFor = Math.min(remaining + 2, 30);
     const existingPrompts = collected.map((q) => q.prompt);
-    const prompt = buildPrompt({ ...req, content }, askFor, existingPrompts);
+    // AI tab uses the knowledge-based (non-strict) prompt; all other sources use
+    // the strict source-grounded prompt.
+    const prompt =
+      req.sourceType === 'ai'
+        ? buildAiPrompt({ ...req, content }, askFor, existingPrompts)
+        : buildPrompt({ ...req, content }, askFor, existingPrompts);
 
     let result: { questions: RawQuestion[]; title?: string };
     try {
@@ -882,4 +990,154 @@ async function callGroq(
     questions: Array.isArray(parsed.questions) ? parsed.questions : [],
     title: parsed.title,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Extra AI helpers (hint, study guide, photo OCR)
+//
+// These are SEPARATE from generateQuiz so the API routes that call them can be
+// kept OUT of the weekly quiz limit (only generating a quiz counts). Each makes
+// one small Groq call.
+// ---------------------------------------------------------------------------
+
+/** Low-level single text completion against the chat model. Returns the text. */
+async function callGroqText(
+  apiKey: string,
+  systemPrompt: string,
+  userPrompt: string,
+  maxTokens = 600,
+): Promise<string> {
+  const res = await fetch(GROQ_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: MODEL_NAME,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.5,
+      max_tokens: maxTokens,
+      reasoning_effort: 'low',
+    }),
+  });
+  if (!res.ok) {
+    if (res.status === 429) {
+      throw new Error('The free AI is busy right now (rate limit). Please wait a moment and try again.');
+    }
+    throw new Error(`The AI service returned an error (HTTP ${res.status}).`);
+  }
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!isNonEmptyString(content)) {
+    throw new Error('The AI returned an empty response.');
+  }
+  return content.trim();
+}
+
+/**
+ * Generate a short HINT for a question WITHOUT revealing the answer. Used by the
+ * "Why?" button in practice/adaptive mode. `sourceContext` is optional grounding
+ * (the quiz's source text) so the hint stays on-topic.
+ */
+export async function generateHint(
+  prompt: string,
+  sourceContext?: string,
+): Promise<string> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error('GROQ_API_KEY is not set.');
+  const ctx =
+    sourceContext && sourceContext.trim()
+      ? `\n\nRelevant material (for grounding, do not quote it directly):\n"""\n${sourceContext.slice(0, 3000)}\n"""`
+      : '';
+  return callGroqText(
+    apiKey,
+    'You are a helpful study tutor. Give a SHORT hint that nudges the student toward the answer without ever stating it. One or two sentences. Never reveal the answer.',
+    `Question: "${prompt}"${ctx}\n\nGive one short hint (do NOT give the answer).`,
+    200,
+  );
+}
+
+/**
+ * Turn study material into a clean one-page STUDY GUIDE (markdown): key terms,
+ * definitions, and a brief summary. Used by the "Study guide" button.
+ */
+export async function generateStudyGuide(content: string): Promise<string> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error('GROQ_API_KEY is not set.');
+  if (!isNonEmptyString(content)) {
+    throw new Error('Cannot make a study guide from empty material.');
+  }
+  return callGroqText(
+    apiKey,
+    'You are an expert study coach. Turn the student\'s material into a concise, well-organized one-page study guide in Markdown: a short summary, then the key terms/concepts with brief definitions, then 3-5 "remember this" bullet points. Use ONLY the provided material — add no outside facts.',
+    `Material:\n"""\n${content.slice(0, 12000)}\n"""\n\nWrite the study guide in Markdown now.`,
+    1500,
+  );
+}
+
+/**
+ * Read the text out of a PHOTO (handwritten notes / textbook page) using Groq's
+ * vision model. `imageDataUrl` is a data URL ("data:image/...;base64,...") from
+ * the browser. Returns the extracted plain text (caller then builds a quiz from
+ * it). Throws a friendly error if vision is unavailable or finds no text.
+ */
+export async function extractTextFromImage(imageDataUrl: string): Promise<string> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error('GROQ_API_KEY is not set.');
+  if (!isNonEmptyString(imageDataUrl) || !imageDataUrl.startsWith('data:image/')) {
+    throw new Error('That does not look like a valid image.');
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(GROQ_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: VISION_MODEL_NAME,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Transcribe ALL the readable study text in this image as plain text. Preserve lists and term: definition pairs. Output ONLY the transcribed text, no commentary. If there is no readable text, output exactly: NO_TEXT_FOUND',
+              },
+              { type: 'image_url', image_url: { url: imageDataUrl } },
+            ],
+          },
+        ],
+        temperature: 0,
+        max_tokens: 2000,
+      }),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to reach the vision service: ${detail}`);
+  }
+
+  if (!res.ok) {
+    if (res.status === 429) {
+      throw new Error('The free AI is busy right now (rate limit). Please wait a moment and try again.');
+    }
+    throw new Error(
+      `Couldn't read the photo (HTTP ${res.status}). The vision model may be unavailable — try a clearer photo or paste the text instead.`,
+    );
+  }
+
+  const data = await res.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!isNonEmptyString(text) || text.trim() === 'NO_TEXT_FOUND') {
+    throw new Error(
+      'We couldn\'t find readable text in that photo. Try a clearer, well-lit image or paste the text instead.',
+    );
+  }
+  return text.trim();
 }

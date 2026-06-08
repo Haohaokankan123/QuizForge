@@ -23,7 +23,7 @@
 //   are NOT NULL and RLS's `with check` verifies auth.uid() = user_id.
 
 import { createClient } from "@/lib/supabase/server";
-import type { Quiz, UserAnswer } from "@/lib/types";
+import type { Quiz, UserAnswer, QuizConfig } from "@/lib/types";
 
 /**
  * The columns we read back for an attempt row. We also pull the related quiz's
@@ -71,24 +71,42 @@ export interface QuizRow {
  * uuid + created_at. Returns the new DB row id (so callers can link to it), or
  * null if the insert failed (best-effort — never throw and break generation).
  *
+ * The quiz's generation settings (style/mode/timer/focus/sourceType) are stored
+ * in the nullable `config` jsonb column when present. Callers may pass an explicit
+ * `config`; otherwise we fall back to `quiz.config`. We only include the column in
+ * the insert when there's a value, so old saves (and DBs without the column) keep
+ * working.
+ *
  * @param userId - the logged-in user's uuid (becomes quizzes.user_id).
  * @param quiz   - the generated Quiz to persist.
+ * @param config - optional QuizConfig to persist; defaults to quiz.config.
  */
 export async function saveGeneratedQuiz(
   userId: string,
   quiz: Quiz,
+  config?: QuizConfig,
 ): Promise<string | null> {
   const supabase = await createClient();
 
+  // Prefer an explicitly-passed config; otherwise use whatever is on the quiz.
+  const cfg = config ?? quiz.config;
+
+  // Build the row. Only add `config` when we actually have one so the insert
+  // stays valid even if the column is absent/old quizzes have none (it's nullable).
+  const row: Record<string, unknown> = {
+    user_id: userId,
+    title: quiz.title,
+    difficulty: quiz.difficulty,
+    source_type: quiz.source_type,
+    questions: quiz.questions,
+  };
+  if (cfg && Object.keys(cfg).length > 0) {
+    row.config = cfg;
+  }
+
   const { data, error } = await supabase
     .from("quizzes")
-    .insert({
-      user_id: userId,
-      title: quiz.title,
-      difficulty: quiz.difficulty,
-      source_type: quiz.source_type,
-      questions: quiz.questions,
-    })
+    .insert(row)
     .select("id")
     .single();
 
