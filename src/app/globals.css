@@ -14,35 +14,39 @@
    OLED-safe: backgrounds are never pure #000.
    -------------------------------------------------------------------------- */
 :root {
-  /* Surfaces / backgrounds */
-  --bg-deep: #060608;
-  --bg-base: #0b0b0f;
-  --bg-elevated: #121218;
-  --surface: rgba(255, 255, 255, 0.05);
+  /* Surfaces / backgrounds — deep "night indigo" (blue-black), richer than a
+     neutral black so the vivid accents read as glowing against it. OLED-safe. */
+  --bg-deep: #07060f;
+  --bg-base: #0c0a1a;
+  --bg-elevated: #15122a;
+  --surface: rgba(255, 255, 255, 0.06);
 
   /* Text */
-  --foreground: #ececef;
-  --foreground-muted: #8a8f98;
+  --foreground: #f4f4fb;
+  --foreground-muted: #a3a0c0; /* slightly violet-tinted grey to match the theme */
 
-  /* Brand */
-  --accent: #6366f1; /* indigo — primary actions, focus ring */
-  --accent-glow: rgba(99, 102, 241, 0.22);
-  --secondary: #a855f7; /* violet — gradient pair */
+  /* Brand — brighter indigo→violet with a stronger glow so colors POP. */
+  --accent: #7c6cff; /* vivid indigo */
+  --accent-glow: rgba(124, 108, 255, 0.45);
+  --secondary: #b06cff; /* vivid violet — gradient pair */
+  --accent-2: #22d3ee; /* electric cyan — secondary pop / highlights */
+  --accent-3: #ec4899; /* hot pink — tertiary pop */
 
-  /* Status */
-  --success: #34d399;
-  --warning: #fbbf24; /* gold — scores */
-  --destructive: #f87171;
+  /* Status — punchier, more saturated so success/score/error stand out. */
+  --success: #2ee6a6;
+  --warning: #ffc83d; /* gold — scores */
+  --destructive: #ff5d6c;
 
   /* Lines / shape */
-  --border: rgba(255, 255, 255, 0.08);
+  --border: rgba(255, 255, 255, 0.10);
   --radius: 16px;
 
   /* Motion — cinematic easing curve used across the app */
   --ease-cinema: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* Gradient helper (indigo -> violet) */
-  --gradient-brand: linear-gradient(135deg, var(--accent) 0%, var(--secondary) 100%);
+  /* Gradient helpers — multi-stop for vibrancy. */
+  --gradient-brand: linear-gradient(135deg, var(--accent) 0%, var(--secondary) 55%, var(--accent-3) 100%);
+  --gradient-cool: linear-gradient(135deg, var(--accent-2) 0%, var(--accent) 100%);
 }
 
 /* ----------------------------------------------------------------------------
@@ -67,6 +71,8 @@
   /* Brand */
   --color-accent: var(--accent);
   --color-secondary: var(--secondary);
+  --color-accent-2: var(--accent-2);
+  --color-accent-3: var(--accent-3);
 
   /* Status */
   --color-success: var(--success);
@@ -153,7 +159,25 @@ body {
 
 /* Soft brand glow shadow for primary CTAs and active states. */
 .glow-accent {
-  box-shadow: 0 0 0 1px var(--border), 0 8px 32px -8px var(--accent-glow);
+  box-shadow:
+    0 0 0 1px var(--border),
+    0 10px 40px -10px var(--accent-glow),
+    0 0 22px -6px var(--accent-glow);
+}
+
+/* Stronger, more vivid glow for hero CTAs / emphasized elements. */
+.glow-accent-strong {
+  box-shadow:
+    0 8px 28px -8px var(--accent-glow),
+    0 0 36px -4px var(--accent-glow);
+}
+
+/* Cool (cyan→indigo) gradient text variant. */
+.text-gradient-cool {
+  background-image: var(--gradient-cool);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 /* ----------------------------------------------------------------------------

@@ -39,7 +39,7 @@ export default function AmbientBackground() {
           height: "46vw",
           maxWidth: "640px",
           maxHeight: "640px",
-          opacity: 0.16,
+          opacity: 0.32,
           background:
             "radial-gradient(circle at center, var(--accent) 0%, transparent 70%)",
         }}
@@ -66,7 +66,7 @@ export default function AmbientBackground() {
           height: "52vw",
           maxWidth: "720px",
           maxHeight: "720px",
-          opacity: 0.13,
+          opacity: 0.28,
           background:
             "radial-gradient(circle at center, var(--secondary) 0%, transparent 70%)",
         }}
@@ -83,7 +83,7 @@ export default function AmbientBackground() {
         }}
       />
 
-      {/* Blob 3 — accent indigo, center-right (subtle depth) */}
+      {/* Blob 3 — electric cyan, center-right (tri-color pop + depth) */}
       <motion.div
         style={{
           ...blobBase,
@@ -93,9 +93,9 @@ export default function AmbientBackground() {
           height: "40vw",
           maxWidth: "560px",
           maxHeight: "560px",
-          opacity: 0.1,
+          opacity: 0.2,
           background:
-            "radial-gradient(circle at center, var(--accent) 0%, transparent 72%)",
+            "radial-gradient(circle at center, var(--accent-2) 0%, transparent 72%)",
         }}
         animate={
           reduceMotion
