@@ -165,6 +165,19 @@ export default function GeneratePage() {
   // generation (and so we can time it out) without losing their pasted content.
   const abortRef = useRef<AbortController | null>(null);
 
+  // On mount, drop any quiz/result left in session storage from a PREVIOUS
+  // attempt. Combined with clearing it again right before each generation, this
+  // guarantees a stale quiz (e.g. an old "earthquake" one) can never be picked
+  // up when you return to this page to make a new quiz.
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem(ACTIVE_QUIZ_KEY);
+      sessionStorage.removeItem("qf_active_result");
+    } catch {
+      // ignore — non-critical
+    }
+  }, []);
+
   // --- Derived validation ---
   const isAiTab = activeTab === "ai";
   const trimmedLength = content.trim().length;
@@ -217,8 +230,41 @@ export default function GeneratePage() {
   async function handleGenerate() {
     if (!canSubmit) return;
 
+    // SNAPSHOT the exact inputs at click-time, so an async tab-switch or a
+    // late-finishing extraction can't change what we send mid-flight. Everything
+    // below uses these locals, never the live state.
+    const snapTab = activeTab;
+    const snapContent = content.trim();
+    const snapTopic = topic.trim();
+
+    // FINAL INTEGRITY GUARD: never send empty/mismatched content. This is the
+    // bulletproof check that kills the "quiz from a previous session" class of
+    // bug — if the active tab has nothing real to send, we refuse rather than
+    // fall back to whatever stale value might be in state.
+    if (snapTab === "ai") {
+      if (!snapTopic) {
+        setError("Describe what you want to be quizzed on first.");
+        return;
+      }
+    } else if (!snapContent) {
+      setError(
+        "Add your study content again — it didn't come through. (Re-pick your file or paste your text.)",
+      );
+      return;
+    }
+
     setLoading(true);
     setError(null);
+
+    // Clear any PREVIOUS quiz from session storage NOW, before we generate. If
+    // this request fails or races, the player can never read a stale quiz from
+    // an earlier session (the root of the "earthquake quiz" bug).
+    try {
+      sessionStorage.removeItem(ACTIVE_QUIZ_KEY);
+      sessionStorage.removeItem("qf_active_result");
+    } catch {
+      // ignore — non-critical
+    }
 
     // Abort the request if it runs too long (the engine can do several retry
     // rounds + per-chunk calls for big sources). Without this, a stalled network
@@ -233,16 +279,16 @@ export default function GeneratePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          content: content.trim(),
+          content: snapContent,
           types: selectedTypes,
           difficulty,
           count,
           // The AI tab reports its own source type; otherwise use what the picker set.
-          sourceType: isAiTab ? "ai" : sourceType,
+          sourceType: snapTab === "ai" ? "ai" : sourceType,
           style,
           focus: focus.trim() || undefined,
-          ...(isAiTab
-            ? { topic: topic.trim(), useOwnKnowledge }
+          ...(snapTab === "ai"
+            ? { topic: snapTopic, useOwnKnowledge }
             : {}),
         }),
         signal: controller.signal,
