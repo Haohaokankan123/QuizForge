@@ -26,7 +26,7 @@
 //     the dashboard never hard-crashes on a network/DB hiccup.
 
 import type { Quiz } from "@/lib/types";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getUserSafe } from "@/lib/supabase/client";
 import {
   deleteAttempt as deleteLocalAttempt,
   listAttempts as listLocalAttempts,
@@ -46,15 +46,11 @@ export type { SavedAttempt, HistoryStats } from "@/lib/history";
  * the answer. Returns null on any error so callers fall back to localStorage.
  */
 export async function getCurrentUserId(): Promise<string | null> {
-  try {
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    return user?.id ?? null;
-  } catch {
-    return null;
-  }
+  // getUserSafe clears a stale/expired session and returns null instead of
+  // throwing the "Invalid Refresh Token" error, so this never surfaces an
+  // unhandled error and the dead cookie doesn't keep re-triggering it.
+  const user = await getUserSafe(createClient());
+  return user?.id ?? null;
 }
 
 /**

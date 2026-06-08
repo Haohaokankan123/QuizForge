@@ -25,7 +25,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getUserSafe } from "@/lib/supabase/client";
 
 /** What the guard currently knows about the viewer. */
 type AuthState = "checking" | "authed";
@@ -41,20 +41,12 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     const supabase = createClient();
 
     async function check() {
-      // getUser() validates the session with Supabase (not just the local cookie).
-      // Wrap in try/catch: if the auth endpoint is unreachable (network drop,
-      // Supabase down), we must NOT hang on the spinner forever. Treating
-      // "can't verify" as "not signed in" is the safe choice — real enforcement
-      // is server-side RLS, so the worst case is a needless trip to /login.
-      let user = null;
-      try {
-        const { data } = await supabase.auth.getUser();
-        user = data.user;
-      } catch {
-        if (!active) return;
-        router.replace("/login");
-        return;
-      }
+      // getUserSafe() validates the session and, if the token is expired/invalid
+      // (stale cookie) or the endpoint is unreachable, clears the dead session
+      // and returns null instead of throwing — so we never hang on the spinner
+      // or surface an "Invalid Refresh Token" error. Treating "can't verify" as
+      // "not signed in" is safe: real enforcement is server-side RLS.
+      const user = await getUserSafe(supabase);
 
       if (!active) return;
 

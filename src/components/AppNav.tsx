@@ -37,7 +37,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getUserSafe } from "@/lib/supabase/client";
 
 /** A single right-side nav destination. */
 interface NavItem {
@@ -84,7 +84,10 @@ export default function AppNav() {
     const supabase = createClient();
     let active = true;
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    // getUserSafe swallows the "Invalid Refresh Token" throw from a stale cookie
+    // (clears the dead session and returns null) so it never bubbles up as an
+    // unhandled error / dev overlay — the nav just shows "signed-out".
+    void getUserSafe(supabase).then((user) => {
       if (!active) return;
       setAccount(
         user
