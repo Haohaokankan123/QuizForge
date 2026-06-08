@@ -1,0 +1,16 @@
+# Files the Vercel CLI must NOT upload from the local directory.
+# The Vercel CLI deploys from disk (not git), so .gitignore alone is not enough.
+
+# Cloudflare-only secrets + build artifacts — irrelevant to Vercel and the
+# .dev.vars file actively breaks Vercel's build ("Using secrets defined in
+# .dev.vars" → EPIPE). It also contains secret keys that must never be uploaded.
+.dev.vars
+.open-next/
+.wrangler/
+cloudflare-env.d.ts
+wrangler.jsonc
+open-next.config.ts
+
+# Local env + tooling
+.env*.local
+graphify-out/
